@@ -7,18 +7,25 @@
 }
 
 :root {
-  --bg-dark: #050505;
+  --bg-dark: #0D0D0D;
   --accent-neon: #00ff9d;
   --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-muted: rgba(255, 255, 255, 0.4);
 }
 
 body {
   background-color: var(--bg-dark);
-  color: #ffffff;
+  color: var(--text-primary);
   font-family: var(--font-sans);
   overflow-x: hidden;
 }
+
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
 
 .glass {
   background: var(--glass-bg);

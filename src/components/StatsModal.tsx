@@ -92,28 +92,28 @@ export function StatsModal({ isOpen, onClose, habits, logs }: StatsModalProps) {
             <div className="grid grid-cols-2 gap-3 mb-6">
               <div className="glass rounded-2xl p-4 flex flex-col items-center text-center">
                 <Trophy size={20} className="text-yellow-500 mb-2" />
-                <p className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-1">Longest Streak</p>
-                <p className="text-2xl font-black">{stats.longestStreak}d</p>
+                <p className="text-[10px] font-mono text-white/50 uppercase tracking-widest mb-1">Longest Streak</p>
+                <p className="text-2xl font-black text-white">{stats.longestStreak}d</p>
               </div>
               <div className="glass rounded-2xl p-4 flex flex-col items-center text-center">
                 <Target size={20} className="text-emerald-500 mb-2" />
-                <p className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-1">Completion Rate</p>
-                <p className="text-2xl font-black">{stats.completionRate}%</p>
+                <p className="text-[10px] font-mono text-white/50 uppercase tracking-widest mb-1">Completion Rate</p>
+                <p className="text-2xl font-black text-white">{stats.completionRate}%</p>
               </div>
             </div>
 
             {/* Weekly Activity Chart */}
             <div className="glass rounded-2xl p-4 mb-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-white/50">Weekly Activity</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white/70">Weekly Activity</h3>
                 <div className="flex gap-3">
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-[#00ff9d]" />
-                    <span className="text-[10px] text-white/30 font-mono">Done</span>
+                    <span className="text-[10px] text-white/50 font-mono">Done</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-[#ef4444]" />
-                    <span className="text-[10px] text-white/30 font-mono">Skip</span>
+                    <span className="text-[10px] text-white/50 font-mono">Skip</span>
                   </div>
                 </div>
               </div>
@@ -125,12 +125,12 @@ export function StatsModal({ isOpen, onClose, habits, logs }: StatsModalProps) {
                       dataKey="name" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10, fontFamily: 'JetBrains Mono' }}
+                      tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10, fontFamily: 'JetBrains Mono' }}
                     />
                     <YAxis 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10, fontFamily: 'JetBrains Mono' }}
+                      tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10, fontFamily: 'JetBrains Mono' }}
                     />
                     <Tooltip 
                       cursor={{ fill: 'rgba(255,255,255,0.05)' }}
@@ -189,7 +189,7 @@ export function StatsModal({ isOpen, onClose, habits, logs }: StatsModalProps) {
             </div>
 
             <div className="text-center">
-              <p className="text-[10px] font-mono text-white/20 italic">
+              <p className="text-[10px] font-mono text-white/50 italic">
                 "Data is the fuel of discipline. Analyze. Adapt. Ascend."
               </p>
             </div>

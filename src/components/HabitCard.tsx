@@ -5,11 +5,14 @@ import {
   Sword, Flame, Heart, Coffee, Music, Camera, Bike, Timer, 
   Target, Award, Sun, Wind, Cloud, Trees, Anchor, Compass, 
   Map, PenTool, Smile, Star, Trophy, Users, Laptop, Utensils,
-  Wallet, Plane, GraduationCap, Activity, Check, X, Edit2, Trash2
+  Wallet, Plane, GraduationCap, Activity, Check, X, Edit2, Trash2,
+  Lock
 } from 'lucide-react';
 import { type Habit, db } from '../db/db';
 import { cn } from '../lib/utils';
 import { format, isToday, startOfDay } from 'date-fns';
+import { triggerHaptic } from '../App';
+import { translations } from '../lib/i18n';
 
 const iconMap: Record<string, any> = {
   Brain, Dumbbell, Shield, Zap, Book, Droplets, Moon, Code, 
@@ -34,7 +37,11 @@ export function HabitCard({ habit, todayStatus, onEdit, onDelete, onComplete, on
   const isCompletedToday = todayStatus === 'done';
   const isSkippedToday = todayStatus === 'skip';
   const isActionedToday = !!todayStatus;
+  const isLocked = habit.strictMode && isActionedToday;
   const [isLongPressing, setIsLongPressing] = useState(false);
+
+  const lang = (localStorage.getItem('aura-lang') as 'en' | 'mm') || 'en';
+  const t = translations[lang];
 
   // Long press handler
   let pressTimer: NodeJS.Timeout;
@@ -54,15 +61,22 @@ export function HabitCard({ habit, todayStatus, onEdit, onDelete, onComplete, on
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.98 }}
+      variants={{
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0 }
+      }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      whileHover={{ 
+        scale: 1.01, 
+        boxShadow: "0 10px 30px -10px rgba(0,0,0,0.5), 0 0 20px 0px rgba(255,255,255,0.02)",
+        borderColor: "rgba(255,255,255,0.1)"
+      }}
       onMouseDown={startPress}
       onMouseUp={endPress}
       onTouchStart={startPress}
       onTouchEnd={endPress}
       className={cn(
-        "glass relative overflow-hidden rounded-2xl p-3 group transition-all duration-300",
+        "glass relative overflow-hidden rounded-2xl p-3.5 group transition-all duration-300 border border-white/5",
         isLongPressing && "scale-[0.98] border-white/20"
       )}
     >
@@ -73,86 +87,109 @@ export function HabitCard({ habit, todayStatus, onEdit, onDelete, onComplete, on
       />
 
       {/* Single Line Header: Icon, Title, Streak */}
-      <div className="flex items-center justify-between mb-2.5">
-        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <div 
-            className="w-9 h-9 rounded-xl flex items-center justify-center glass shrink-0"
-            style={{ color: habit.color, boxShadow: `0 0 12px ${habit.color}22` }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center glass shrink-0"
+            style={{ color: habit.color, boxShadow: `0 0 12px ${habit.color}15` }}
           >
-            <Icon size={18} />
+            <Icon size={16} />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-bold tracking-tight truncate leading-tight">{habit.name}</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] font-mono text-white/30 whitespace-nowrap">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold tracking-tight truncate leading-tight text-primary">{habit.name}</h3>
+              <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                <span className="text-[9px] font-mono text-muted uppercase tracking-widest">{t.streak}</span>
+                <span className="text-sm font-black text-primary">{habit.streak}d</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[10px] font-mono text-secondary whitespace-nowrap">
                 {format(new Date(habit.startDate), 'MMM d, HH:mm')}
               </span>
               {habit.strictMode && (
-                <div className="flex items-center gap-1 text-red-500/60">
-                  <Shield size={8} />
-                  <span className="text-[8px] font-mono uppercase tracking-tighter">Strict</span>
+                <div className="flex items-center gap-1 text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded-md">
+                  <Shield size={9} />
+                  <span className="text-[9px] font-bold uppercase tracking-tighter">{t.strict_mode}</span>
                 </div>
               )}
             </div>
           </div>
         </div>
-
-        <div className="flex flex-col items-end ml-2 shrink-0">
-          <span className="text-[8px] font-mono text-white/20 uppercase tracking-widest leading-none mb-0.5">Streak</span>
-          <span className="text-sm font-black text-white/90 leading-none">{habit.streak}d</span>
-        </div>
       </div>
 
-      {/* Compact Action Row */}
-      <div className="flex items-center gap-1.5">
-        <button
-          onClick={() => habit.id && onComplete(habit.id)}
-          disabled={isActionedToday}
-          className={cn(
-            "flex-[2.5] h-9 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all active:scale-95 overflow-hidden",
-            isActionedToday 
-              ? "bg-white/5 text-white/20 cursor-not-allowed" 
-              : "bg-white text-black hover:bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.15)]"
-          )}
-        >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={isCompletedToday ? 'done' : isSkippedToday ? 'skipped' : 'todo'}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex items-center gap-1.5"
-            >
-              {isCompletedToday ? <Check size={12} /> : isSkippedToday ? <X size={12} /> : <Zap size={12} />}
-              <span>{isCompletedToday ? 'Done' : isSkippedToday ? 'Skipped' : 'Complete'}</span>
-            </motion.div>
-          </AnimatePresence>
-        </button>
-
-        <button
-          onClick={() => habit.id && onSkip(habit.id)}
-          disabled={isActionedToday}
-          className={cn(
-            "flex-1 h-9 rounded-xl glass text-[10px] font-bold transition-all flex items-center justify-center",
-            isActionedToday ? "text-white/5 cursor-not-allowed" : "text-white/30 hover:text-white hover:bg-white/5"
-          )}
-        >
-          {isSkippedToday ? 'Skipped' : 'Skip'}
-        </button>
-
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={() => onEdit(habit)}
-            className="w-8 h-8 rounded-xl glass flex items-center justify-center text-white/20 hover:text-white transition-all active:scale-90"
+      {/* Action Row: Refined Hierarchy and Tap Targets */}
+      <div className="flex items-center justify-between gap-2 mt-1">
+        <div className="flex items-center gap-2 flex-1">
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              triggerHaptic('medium');
+              habit.id && onComplete(habit.id);
+            }}
+            className={cn(
+              "flex-[2] h-10 rounded-xl font-bold text-[12px] flex items-center justify-center gap-2 transition-all overflow-hidden",
+              isCompletedToday 
+                ? "bg-[#00ff9d] text-black shadow-[0_0_20px_rgba(0,255,157,0.2)]" 
+                : "bg-primary text-black dark:text-black hover:opacity-90 shadow-[0_0_15px_rgba(255,255,255,0.1)]",
+              isLocked && isCompletedToday && "opacity-90 cursor-default"
+            )}
+            style={!isCompletedToday ? { backgroundColor: 'var(--text-primary)' } : {}}
           >
-            <Edit2 size={12} />
-          </button>
-          <button 
-            onClick={() => habit.id && onDelete(habit.id)}
-            className="w-8 h-8 rounded-xl glass flex items-center justify-center text-red-500/30 hover:text-red-500 hover:bg-red-500/10 transition-all active:scale-90"
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={isCompletedToday ? 'done' : 'todo'}
+                initial={isLocked ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={isLocked ? { opacity: 1, y: 0 } : { opacity: 0, y: -10 }}
+                className="flex items-center gap-2"
+              >
+                {isCompletedToday ? (isLocked ? <Lock size={14} /> : <Check size={14} />) : <Zap size={14} />}
+                <span>{isCompletedToday ? t.done : t.complete}</span>
+              </motion.div>
+            </AnimatePresence>
+          </motion.button>
+
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              triggerHaptic('light');
+              habit.id && onSkip(habit.id);
+            }}
+            className={cn(
+              "flex-1 h-10 text-[12px] font-bold transition-all flex items-center justify-center gap-1.5",
+              isSkippedToday 
+                ? "text-red-400" 
+                : "text-secondary hover:text-primary"
+            )}
           >
-            <Trash2 size={12} />
-          </button>
+            {isSkippedToday ? (isLocked ? <Lock size={12} /> : <X size={12} />) : null}
+            <span>{isSkippedToday ? t.skipped : t.skip}</span>
+          </motion.button>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              triggerHaptic('light');
+              onEdit(habit);
+            }}
+            className="flex items-center gap-2 px-3 h-10 rounded-xl glass text-muted hover:text-primary transition-all"
+          >
+            <Edit2 size={14} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">{t.edit}</span>
+          </motion.button>
+          <motion.button 
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              triggerHaptic('medium');
+              habit.id && onDelete(habit.id);
+            }}
+            className="w-10 h-10 rounded-xl glass flex items-center justify-center text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all"
+          >
+            <Trash2 size={16} />
+          </motion.button>
         </div>
       </div>
 

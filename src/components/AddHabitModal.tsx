@@ -5,10 +5,11 @@ import {
   Sword, Flame, Heart, Coffee, Music, Camera, Bike, Timer, 
   Target, Award, Sun, Wind, Cloud, Trees, Anchor, Compass, 
   Map, PenTool, Smile, Star, Trophy, Users, Laptop, Utensils,
-  Wallet, Plane, GraduationCap, Activity
+  Wallet, Plane, GraduationCap, Activity, AlertTriangle
 } from 'lucide-react';
 import { type Habit } from '../db/db';
 import { cn } from '../lib/utils';
+import { translations } from '../lib/i18n';
 
 const icons = [
   { name: 'Brain', icon: Brain },
@@ -75,6 +76,9 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
   const [showStrictConfirm, setShowStrictConfirm] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
 
+  const lang = (localStorage.getItem('aura-lang') as 'en' | 'mm') || 'en';
+  const t = translations[lang];
+
   useEffect(() => {
     if (initialData) {
       setName(initialData.name);
@@ -138,12 +142,12 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
             className="glass w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] p-6 relative z-10 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold tracking-tight">
-                {initialData ? 'Edit Protocol' : 'New Protocol'}
+              <h2 className="text-xl font-bold tracking-tight text-primary">
+                {initialData ? t.edit_protocol : t.new_protocol}
               </h2>
               <button 
                 onClick={onClose}
-                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                className="p-2 hover:bg-black/10 dark:hover:bg-white/10 rounded-full transition-colors text-primary"
               >
                 <X size={18} />
               </button>
@@ -152,7 +156,7 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Compact Name Input with Aura Preview */}
               <div>
-                <label className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-1.5 block">Protocol Name</label>
+                <label className="text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5 block">{t.protocol_name}</label>
                 <div className="relative">
                   <div 
                     className="absolute left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-300"
@@ -161,12 +165,11 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                     <SelectedIcon size={14} />
                   </div>
                   <input
-                    autoFocus
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Deep Work"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 pl-11 focus:outline-none transition-all duration-300 text-base"
+                    className="w-full bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/10 rounded-xl p-3 pl-11 focus:outline-none transition-all duration-300 text-base text-primary placeholder:text-muted"
                     style={{ borderColor: name ? `${color}44` : undefined, boxShadow: name ? `0 0 15px ${color}11` : undefined }}
                     required
                   />
@@ -175,7 +178,7 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
 
               {/* Horizontal Scroll Icon Selection */}
               <div>
-                <label className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-1.5 block">Visual Identity ({icons.length})</label>
+                <label className="text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5 block">{t.visual_identity} ({icons.length})</label>
                 <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
                   {icons.map(({ name: iconName, icon: Icon }) => (
                     <button
@@ -183,8 +186,9 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                       type="button"
                       onClick={() => setIcon(iconName)}
                       className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0 ${
-                        icon === iconName ? 'bg-white text-black scale-105 shadow-lg' : 'glass text-white/30 hover:text-white'
+                        icon === iconName ? 'bg-primary text-black dark:text-black scale-105 shadow-lg' : 'glass text-muted hover:text-primary'
                       }`}
+                      style={icon === iconName ? { backgroundColor: 'var(--text-primary)' } : {}}
                     >
                       <Icon size={16} />
                     </button>
@@ -194,15 +198,15 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
 
               {/* Compact Color Grid */}
               <div>
-                <label className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-1.5 block">Aura Color ({colors.length})</label>
-                <div className="grid grid-cols-8 gap-2 max-h-24 overflow-y-auto pr-1 no-scrollbar">
+                <label className="text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5 block">{t.aura_color} ({colors.length})</label>
+                <div className="grid grid-cols-8 gap-3 max-h-24 overflow-y-auto pr-1 no-scrollbar">
                   {colors.map((c) => (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setColor(c)}
                       className={`w-full aspect-square rounded-full transition-all ${
-                        color === c ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-black' : 'opacity-30 hover:opacity-100'
+                        color === c ? 'scale-110 ring-2 ring-primary ring-offset-2 ring-offset-black dark:ring-offset-black' : 'opacity-40 hover:opacity-100'
                       }`}
                       style={{ backgroundColor: c }}
                     />
@@ -214,13 +218,13 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
               <div className="space-y-2">
                 <div className="flex items-center justify-between glass p-3 rounded-xl">
                   <div className="flex items-center gap-2.5">
-                    <div className={cn("p-1.5 rounded-lg", strictMode ? "bg-red-500/20 text-red-500" : "bg-white/5 text-white/20")}>
+                    <div className={cn("p-1.5 rounded-lg", strictMode ? "bg-red-500/20 text-red-500" : "bg-black/5 dark:bg-white/5 text-muted")}>
                       <Shield size={16} />
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <p className="font-bold text-xs">Strict Mode</p>
-                        <button type="button" onClick={() => setShowInfo(!showInfo)} className="text-white/20 hover:text-white transition-colors">
+                        <p className="font-bold text-xs text-primary">{t.strict_mode}</p>
+                        <button type="button" onClick={() => setShowInfo(!showInfo)} className="text-muted hover:text-primary transition-colors">
                           <Info size={12} />
                         </button>
                       </div>
@@ -229,7 +233,7 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                   <button
                     type="button"
                     onClick={handleStrictToggle}
-                    className={`w-10 h-5 rounded-full transition-colors relative ${strictMode ? 'bg-red-500' : 'bg-white/10'}`}
+                    className={`w-10 h-5 rounded-full transition-colors relative ${strictMode ? 'bg-red-500' : 'bg-black/10 dark:bg-white/10'}`}
                   >
                     <motion.div
                       animate={{ x: strictMode ? 22 : 2 }}
@@ -246,8 +250,8 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <p className="text-[10px] text-white/40 bg-white/5 p-2.5 rounded-lg leading-relaxed italic">
-                        "Strict Mode" enforces absolute discipline. If you miss a single day, your streak will be shattered and reset to 0 immediately. No exceptions.
+                      <p className="text-[10px] text-muted bg-black/5 dark:bg-white/5 p-2.5 rounded-lg leading-relaxed italic">
+                        {t.strict_desc}
                       </p>
                     </motion.div>
                   )}
@@ -256,9 +260,10 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
 
               <button
                 type="submit"
-                className="w-full h-12 bg-white text-black rounded-xl font-bold text-sm hover:bg-white/90 transition-all active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.15)] mt-2"
+                className="w-full h-12 bg-primary text-black dark:text-black rounded-xl font-bold text-sm hover:opacity-90 transition-all active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.15)] mt-2"
+                style={{ backgroundColor: 'var(--text-primary)' }}
               >
-                {initialData ? 'Update Aura' : 'Initialize Aura'}
+                {initialData ? t.update_aura : t.initialize_aura}
               </button>
             </form>
 
@@ -273,11 +278,11 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                 >
                   <div className="space-y-4">
                     <div className="w-12 h-12 bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-2">
-                      <Shield size={24} />
+                      <AlertTriangle size={24} />
                     </div>
-                    <h3 className="text-lg font-bold">Activate Strict Protocol?</h3>
+                    <h3 className="text-lg font-bold">{t.activate_strict}</h3>
                     <p className="text-xs text-white/40 leading-relaxed">
-                      You won't be able to undo your progress. If you miss a single day, your streak will be shattered. Are you sure?
+                      {t.strict_warning}
                     </p>
                     <div className="flex gap-3 pt-2">
                       <button
@@ -285,14 +290,14 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                         onClick={() => setShowStrictConfirm(false)}
                         className="flex-1 h-10 rounded-xl glass text-xs font-bold"
                       >
-                        Cancel
+                        {t.cancel}
                       </button>
                       <button
                         type="button"
                         onClick={confirmStrictMode}
                         className="flex-1 h-10 rounded-xl bg-red-500 text-white text-xs font-bold"
                       >
-                        Confirm
+                        {t.confirm}
                       </button>
                     </div>
                   </div>
