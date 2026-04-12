@@ -57,7 +57,7 @@ const colors = [
   // Deep Jewels
   '#4C1D95', '#7F1D1D', '#064E3B', '#1E3A8A', '#78350F', '#831843', '#164E63', '#365314',
   // Gradients (represented by primary color for simplicity in this palette)
-  '#C026D3', '#DB2777', '#4ADE80', '#2DD4BF', '#FB923C', '#F87171'
+  '#C026D3', '#DB2777', '#4ADE80', '#2DD4BF', '#FB923C'
 ];
 
 interface AddHabitModalProps {
@@ -72,6 +72,7 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
   const [icon, setIcon] = useState('Brain');
   const [color, setColor] = useState(colors[0]);
   const [strictMode, setStrictMode] = useState(false);
+  const [showStrictConfirm, setShowStrictConfirm] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
 
   useEffect(() => {
@@ -87,6 +88,19 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
       setStrictMode(false);
     }
   }, [initialData, isOpen]);
+
+  const handleStrictToggle = () => {
+    if (!strictMode) {
+      setShowStrictConfirm(true);
+    } else {
+      setStrictMode(false);
+    }
+  };
+
+  const confirmStrictMode = () => {
+    setStrictMode(true);
+    setShowStrictConfirm(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,7 +228,7 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                   </div>
                   <button
                     type="button"
-                    onClick={() => setStrictMode(!strictMode)}
+                    onClick={handleStrictToggle}
                     className={`w-10 h-5 rounded-full transition-colors relative ${strictMode ? 'bg-red-500' : 'bg-white/10'}`}
                   >
                     <motion.div
@@ -247,6 +261,44 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                 {initialData ? 'Update Aura' : 'Initialize Aura'}
               </button>
             </form>
+
+            {/* Strict Mode Confirmation Overlay */}
+            <AnimatePresence>
+              {showStrictConfirm && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="absolute inset-0 z-20 bg-black/95 flex items-center justify-center p-6 text-center rounded-[2rem]"
+                >
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-2">
+                      <Shield size={24} />
+                    </div>
+                    <h3 className="text-lg font-bold">Activate Strict Protocol?</h3>
+                    <p className="text-xs text-white/40 leading-relaxed">
+                      You won't be able to undo your progress. If you miss a single day, your streak will be shattered. Are you sure?
+                    </p>
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowStrictConfirm(false)}
+                        className="flex-1 h-10 rounded-xl glass text-xs font-bold"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmStrictMode}
+                        className="flex-1 h-10 rounded-xl bg-red-500 text-white text-xs font-bold"
+                      >
+                        Confirm
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </div>
       )}

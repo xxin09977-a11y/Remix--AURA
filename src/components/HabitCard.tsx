@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Brain, Dumbbell, Shield, Zap, Book, Droplets, Moon, Code, 
   Sword, Flame, Heart, Coffee, Music, Camera, Bike, Timer, 
@@ -22,15 +22,18 @@ const iconMap: Record<string, any> = {
 interface HabitCardProps {
   key?: React.Key;
   habit: Habit;
+  todayStatus?: 'done' | 'skip' | 'fail';
   onEdit: (habit: Habit) => void;
   onDelete: (id: number) => Promise<void> | void;
   onComplete: (id: number) => Promise<void> | void;
   onSkip: (id: number) => Promise<void> | void;
 }
 
-export function HabitCard({ habit, onEdit, onDelete, onComplete, onSkip }: HabitCardProps) {
+export function HabitCard({ habit, todayStatus, onEdit, onDelete, onComplete, onSkip }: HabitCardProps) {
   const Icon = iconMap[habit.icon] || Zap;
-  const isCompletedToday = habit.lastCompleted && isToday(new Date(habit.lastCompleted));
+  const isCompletedToday = todayStatus === 'done';
+  const isSkippedToday = todayStatus === 'skip';
+  const isActionedToday = !!todayStatus;
   const [isLongPressing, setIsLongPressing] = useState(false);
 
   // Long press handler
@@ -104,24 +107,37 @@ export function HabitCard({ habit, onEdit, onDelete, onComplete, onSkip }: Habit
       <div className="flex items-center gap-1.5">
         <button
           onClick={() => habit.id && onComplete(habit.id)}
-          disabled={isCompletedToday}
+          disabled={isActionedToday}
           className={cn(
-            "flex-[2.5] h-9 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all active:scale-95",
-            isCompletedToday 
+            "flex-[2.5] h-9 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all active:scale-95 overflow-hidden",
+            isActionedToday 
               ? "bg-white/5 text-white/20 cursor-not-allowed" 
               : "bg-white text-black hover:bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.15)]"
           )}
         >
-          {isCompletedToday ? <Check size={12} /> : <Zap size={12} />}
-          <span>{isCompletedToday ? 'Done' : 'Complete'}</span>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={isCompletedToday ? 'done' : isSkippedToday ? 'skipped' : 'todo'}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex items-center gap-1.5"
+            >
+              {isCompletedToday ? <Check size={12} /> : isSkippedToday ? <X size={12} /> : <Zap size={12} />}
+              <span>{isCompletedToday ? 'Done' : isSkippedToday ? 'Skipped' : 'Complete'}</span>
+            </motion.div>
+          </AnimatePresence>
         </button>
 
         <button
           onClick={() => habit.id && onSkip(habit.id)}
-          disabled={isCompletedToday}
-          className="flex-1 h-9 rounded-xl glass text-[10px] font-bold text-white/30 hover:text-white hover:bg-white/5 transition-all flex items-center justify-center"
+          disabled={isActionedToday}
+          className={cn(
+            "flex-1 h-9 rounded-xl glass text-[10px] font-bold transition-all flex items-center justify-center",
+            isActionedToday ? "text-white/5 cursor-not-allowed" : "text-white/30 hover:text-white hover:bg-white/5"
+          )}
         >
-          Skip
+          {isSkippedToday ? 'Skipped' : 'Skip'}
         </button>
 
         <div className="flex items-center gap-1 shrink-0">

@@ -16,7 +16,7 @@ export interface Log {
   id?: number;
   habitId: number;
   date: string; // YYYY-MM-DD
-  status: 'done' | 'skip' | 'fail';
+  status: 'done' | 'skip' | 'skipped' | 'fail';
   timestamp: Date;
 }
 
