@@ -73,6 +73,9 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
   const [icon, setIcon] = useState('Brain');
   const [color, setColor] = useState(colors[0]);
   const [strictMode, setStrictMode] = useState(false);
+  const [reminderTime, setReminderTime] = useState('');
+  const [reminderFrequency, setReminderFrequency] = useState<'daily' | 'weekly' | 'custom'>('daily');
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [showStrictConfirm, setShowStrictConfirm] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
 
@@ -85,11 +88,17 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
       setIcon(initialData.icon);
       setColor(initialData.color);
       setStrictMode(initialData.strictMode);
+      setReminderTime(initialData.reminderTime || '');
+      setReminderFrequency(initialData.reminderFrequency || 'daily');
+      setPriority(initialData.priority || 'medium');
     } else {
       setName('');
       setIcon('Brain');
       setColor(colors[0]);
       setStrictMode(false);
+      setReminderTime('');
+      setReminderFrequency('daily');
+      setPriority('medium');
     }
   }, [initialData, isOpen]);
 
@@ -113,9 +122,13 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
       icon,
       color,
       strictMode,
+      reminderTime,
+      reminderFrequency,
+      priority,
       startDate: initialData?.startDate || new Date(),
       createdAt: initialData?.createdAt || new Date(),
-      streak: initialData?.streak || 0
+      streak: initialData?.streak || 0,
+      isArchived: initialData?.isArchived || false
     });
     onClose();
   };
@@ -131,15 +144,18 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/90 backdrop-blur-md"
-          />
+            className="absolute inset-0 bg-black/60 backdrop-blur-[20px]"
+          >
+            {/* Scanline Effect */}
+            <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]" />
+          </motion.div>
           
           <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="glass w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] p-6 relative z-10 max-h-[90vh] overflow-y-auto"
+            initial={{ y: '100%', scale: 0.9, opacity: 0 }}
+            animate={{ y: 0, scale: 1, opacity: 1 }}
+            exit={{ y: '100%', scale: 0.9, opacity: 0 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 150 }}
+            className="glass w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] p-6 relative z-10 max-h-[90vh] overflow-y-auto shadow-[0_0_50px_rgba(0,0,0,0.5)]"
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold tracking-tight text-primary">
@@ -214,6 +230,30 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                 </div>
               </div>
 
+              {/* Priority Selection */}
+              <div>
+                <label className="text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5 block">{t.priority}</label>
+                <div className="flex gap-2 p-1 glass rounded-xl">
+                  {(['low', 'medium', 'high'] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPriority(p)}
+                      className={cn(
+                        "flex-1 py-2 rounded-lg text-[10px] font-bold transition-all uppercase tracking-widest",
+                        priority === p 
+                          ? p === 'high' ? "bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]" 
+                            : p === 'medium' ? "bg-yellow-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+                            : "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]"
+                          : "text-muted hover:text-primary"
+                      )}
+                    >
+                      {t[p]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Compact Strict Mode Toggle */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between glass p-3 rounded-xl">
@@ -256,6 +296,34 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                     </motion.div>
                   )}
                 </AnimatePresence>
+              </div>
+
+              {/* Reminder Settings */}
+              <div className="space-y-3">
+                <label className="text-[10px] font-mono text-muted uppercase tracking-widest mb-1 block">{t.reminders}</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="glass p-3 rounded-xl flex flex-col gap-1">
+                    <span className="text-[9px] text-muted uppercase tracking-wider">{t.reminder_time}</span>
+                    <input
+                      type="time"
+                      value={reminderTime}
+                      onChange={(e) => setReminderTime(e.target.value)}
+                      className="bg-transparent text-primary text-sm font-bold focus:outline-none"
+                    />
+                  </div>
+                  <div className="glass p-3 rounded-xl flex flex-col gap-1">
+                    <span className="text-[9px] text-muted uppercase tracking-wider">{t.frequency}</span>
+                    <select
+                      value={reminderFrequency}
+                      onChange={(e) => setReminderFrequency(e.target.value as any)}
+                      className="bg-transparent text-primary text-sm font-bold focus:outline-none appearance-none cursor-pointer"
+                    >
+                      <option value="daily" className="bg-[#0D0D0D]">{t.daily}</option>
+                      <option value="weekly" className="bg-[#0D0D0D]">{t.weekly}</option>
+                      <option value="custom" className="bg-[#0D0D0D]">{t.custom}</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               <button

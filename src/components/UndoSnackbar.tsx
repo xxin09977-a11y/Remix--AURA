@@ -45,7 +45,7 @@ export function UndoSnackbar({ isVisible, onUndo, onClose, isStrict, duration = 
                 {isStrict ? <Lock size={16} /> : <RotateCcw size={16} />}
               </div>
               <div>
-                <p className="text-xs font-bold">{isStrict ? 'Action is Final' : 'Protocol Logged'}</p>
+                <p className="text-xs font-bold">{isStrict ? 'Action is Final' : 'Action Performed'}</p>
                 {!isStrict && (
                   <p className="text-[10px] text-white/40 font-mono">Undo available for {Math.ceil(timeLeft / 1000)}s</p>
                 )}

@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldAlert, ZapOff } from 'lucide-react';
+import { translations } from '../lib/i18n';
 
 interface StrictPenaltyProps {
   isVisible: boolean;
@@ -8,6 +9,9 @@ interface StrictPenaltyProps {
 }
 
 export function StrictPenalty({ isVisible, habitName, onClose }: StrictPenaltyProps) {
+  const lang = (localStorage.getItem('aura-lang') as 'en' | 'mm') || 'en';
+  const t = translations[lang];
+
   return (
     <AnimatePresence>
       {isVisible && (
@@ -33,7 +37,7 @@ export function StrictPenalty({ isVisible, habitName, onClose }: StrictPenaltyPr
               transition={{ delay: 0.2 }}
               className="text-4xl font-black mb-4 tracking-tighter uppercase italic"
             >
-              Streak Shattered
+              {t.streak_shattered}
             </motion.h2>
 
             <motion.p
@@ -42,9 +46,7 @@ export function StrictPenalty({ isVisible, habitName, onClose }: StrictPenaltyPr
               transition={{ delay: 0.3 }}
               className="text-red-200/60 mb-8 font-mono text-sm uppercase tracking-widest leading-relaxed"
             >
-              You failed the <span className="text-white font-bold">{habitName}</span> protocol. 
-              Strict mode has reset your progress to zero. 
-              Discipline is the only way out.
+              {t.penalty_desc.replace('{habit}', habitName)}
             </motion.p>
 
             <motion.button
@@ -55,7 +57,7 @@ export function StrictPenalty({ isVisible, habitName, onClose }: StrictPenaltyPr
               className="w-full h-16 bg-white text-black rounded-2xl font-bold text-lg hover:bg-red-100 transition-all active:scale-95 flex items-center justify-center gap-2"
             >
               <ZapOff size={20} />
-              <span>I Accept the Failure</span>
+              <span>{t.accept_failure}</span>
             </motion.button>
           </div>
 

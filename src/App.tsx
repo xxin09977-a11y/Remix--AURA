@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Zap, Calendar, Trophy, Info, BarChart3, Settings as SettingsIcon, Languages, BellRing } from 'lucide-react';
+import { Plus, Zap, Calendar, Trophy, Info, BarChart3, Settings as SettingsIcon, Languages, BellRing, Download, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import Lottie from 'lottie-react';
@@ -15,9 +15,14 @@ import { AddHabitModal } from './components/AddHabitModal';
 import { StrictPenalty } from './components/StrictPenalty';
 import { StatsModal } from './components/StatsModal';
 import { UndoSnackbar } from './components/UndoSnackbar';
+import { ThemeCreator } from './components/ThemeCreator';
 import { cn } from './lib/utils';
 import { isToday, differenceInDays, startOfDay, subDays, format } from 'date-fns';
 import { translations, type Language } from './lib/i18n';
+import { requestNotificationPermission, startNotificationScheduler } from './lib/notifications';
+import { themes, type ThemeId } from './lib/themes';
+import { playSound } from './lib/sounds';
+import { Volume2 } from 'lucide-react';
 
 const HYPE_MESSAGES_EN = [
   "STAY ALPHA",
@@ -62,17 +67,57 @@ export default function App() {
   const [hapticEnabled, setHapticEnabled] = useState(() => {
     return localStorage.getItem('aura-haptic') !== 'false';
   });
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    return localStorage.getItem('aura-sound') !== 'false';
+  });
+  const [themeId, setThemeId] = useState<ThemeId>(() => {
+    return (localStorage.getItem('aura-theme') as ThemeId) || 'aura';
+  });
 
   const t = translations[language];
   const [hypeMessage, setHypeMessage] = useState(t.hype_messages[0]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [strictToast, setStrictToast] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [isThemeCreatorOpen, setIsThemeCreatorOpen] = useState(false);
+  const customThemes = useLiveQuery(() => db.customThemes.toArray());
+  const [deletedHabit, setDeletedHabit] = useState<{ habit: Habit, logs: Log[] } | null>(null);
+  const [showDeleteUndo, setShowDeleteUndo] = useState(false);
 
   useEffect(() => {
     seedDatabase();
     setHypeMessage(t.hype_messages[Math.floor(Math.random() * t.hype_messages.length)]);
+    requestNotificationPermission();
   }, [language]);
+
+  useEffect(() => {
+    if (habits) {
+      const checkBrokenStreaks = async () => {
+        const today = startOfDay(new Date());
+        let penaltyShown = false;
+        for (const habit of habits) {
+          if (habit.strictMode && habit.streak > 0 && habit.lastCompleted) {
+            const lastComp = startOfDay(new Date(habit.lastCompleted));
+            const daysSinceLast = differenceInDays(today, lastComp);
+            if (daysSinceLast > 1) {
+              // Streak broken!
+              await db.habits.update(habit.id!, {
+                streak: 0,
+                lastCompleted: subDays(today, 1) // Set to yesterday so it doesn't re-trigger
+              });
+              if (!penaltyShown) {
+                setPenaltyHabit(habit.name);
+                penaltyShown = true;
+              }
+            }
+          }
+        }
+      };
+      checkBrokenStreaks();
+      return startNotificationScheduler(habits);
+    }
+  }, [habits]);
 
   useEffect(() => {
     localStorage.setItem('aura-lang', language);
@@ -82,12 +127,30 @@ export default function App() {
     localStorage.setItem('aura-haptic', String(hapticEnabled));
   }, [hapticEnabled]);
 
+  useEffect(() => {
+    localStorage.setItem('aura-sound', String(soundEnabled));
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('aura-theme', themeId);
+    const allThemes = [...themes, ...(customThemes || [])];
+    const theme = allThemes.find(t => t.id === themeId) || themes[0];
+    const root = document.documentElement;
+    root.style.setProperty('--bg-dark', theme.colors.bg);
+    root.style.setProperty('--text-primary', theme.colors.text);
+    root.style.setProperty('--accent-neon', theme.colors.accent);
+    root.style.setProperty('--glass-bg', theme.colors.glass);
+    root.style.setProperty('--glass-border', theme.colors.border);
+    root.style.setProperty('--text-muted', theme.colors.muted);
+    root.style.setProperty('--text-secondary', theme.colors.muted);
+  }, [themeId, customThemes]);
+
   const auraFeedback = useMemo(() => {
     if (!logs || logs.length === 0) return { text: t.protocol_init, type: 'positive' };
 
     const last7Days = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), i), 'yyyy-MM-dd'));
     const recentLogs = logs.filter(l => last7Days.includes(l.date));
-    const skipCount = recentLogs.filter(l => l.status === 'skip').length;
+    const skipCount = recentLogs.filter(l => l.status === 'skip' || l.status === 'skipped').length;
     
     // Check for declining trend (last 3 days vs previous 3 days)
     const last3Days = last7Days.slice(0, 3);
@@ -126,9 +189,13 @@ export default function App() {
         // Toggle OFF: Revert completion
         await handleUndoAction(id);
         return;
-      } else if (existingLog.status === 'skip') {
-        // Switch from Skip to Done: Remove skip log first
-        await db.logs.delete(existingLog.id!);
+      } else if (existingLog.status === 'skip' || existingLog.status === 'none') {
+        // Switch to Done
+        if (existingLog.status === 'skip') {
+          // If it was skip, we need to handle streak logic carefully if we were to just update
+          // But here we just delete and re-add or update.
+          // Let's just update the existing log.
+        }
       }
     }
 
@@ -149,13 +216,22 @@ export default function App() {
       lastCompleted: new Date()
     });
 
-    await db.logs.add({
-      habitId: id,
-      date: todayStr,
-      status: 'done',
-      timestamp: new Date()
-    });
+    if (existingLog) {
+      await db.logs.update(existingLog.id!, {
+        status: 'done',
+        timestamp: new Date()
+      });
+    } else {
+      await db.logs.add({
+        habitId: id,
+        date: todayStr,
+        status: 'done',
+        timestamp: new Date()
+      });
+    }
 
+    triggerHaptic('medium');
+    playSound('success');
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2000);
 
@@ -178,7 +254,13 @@ export default function App() {
 
     if (todayLog && todayLog.id) {
       const isDone = todayLog.status === 'done';
-      await db.logs.delete(todayLog.id);
+      
+      if (todayLog.note) {
+        // Keep the log but reset status if there's a note
+        await db.logs.update(todayLog.id, { status: 'none' });
+      } else {
+        await db.logs.delete(todayLog.id);
+      }
       
       // Find the previous completion date
       const prevLog = await db.logs
@@ -209,7 +291,7 @@ export default function App() {
         setTimeout(() => setStrictToast(false), 2000);
         return;
       }
-      if (existingLog.status === 'skip') {
+      if (existingLog.status === 'skip' || existingLog.status === 'skipped') {
         // Toggle OFF: Revert skip
         await handleUndoAction(id);
         return;
@@ -219,12 +301,22 @@ export default function App() {
       }
     }
 
-    await db.logs.add({
-      habitId: id,
-      date: todayStr,
-      status: 'skip',
-      timestamp: new Date()
-    });
+    // Re-fetch existing log after potential undo
+    const finalLog = await db.logs.where({ habitId: id, date: todayStr }).first();
+
+    if (finalLog) {
+      await db.logs.update(finalLog.id!, {
+        status: 'skipped',
+        timestamp: new Date()
+      });
+    } else {
+      await db.logs.add({
+        habitId: id,
+        date: todayStr,
+        status: 'skipped',
+        timestamp: new Date()
+      });
+    }
     
     await db.habits.update(id, {
       lastCompleted: new Date()
@@ -241,11 +333,102 @@ export default function App() {
   };
 
   const handleDeleteHabit = async (id: number) => {
+    const habit = await db.habits.get(id);
+    if (!habit) return;
+
+    const habitLogs = await db.logs.where('habitId').equals(id).toArray();
+    
+    setDeletedHabit({ habit, logs: habitLogs });
+    setShowDeleteUndo(true);
+
     await db.habits.delete(id);
     await db.logs.where('habitId').equals(id).delete();
+    
+    triggerHaptic('medium');
   };
 
-  const totalStreaks = habits?.reduce((acc, h) => acc + h.streak, 0) || 0;
+  const handleUndoDelete = async () => {
+    if (!deletedHabit) return;
+
+    const { habit, logs: habitLogs } = deletedHabit;
+    const newHabitId = await db.habits.add({
+      ...habit,
+      id: undefined // Let Dexie generate a new ID
+    });
+
+    if (habitLogs.length > 0) {
+      await db.logs.bulkAdd(habitLogs.map(log => ({
+        ...log,
+        id: undefined,
+        habitId: newHabitId as number
+      })));
+    }
+
+    setDeletedHabit(null);
+    setShowDeleteUndo(false);
+    triggerHaptic('light');
+  };
+
+  const handleArchiveHabit = async (id: number) => {
+    const habit = await db.habits.get(id);
+    if (habit) {
+      await db.habits.update(id, { isArchived: !habit.isArchived });
+    }
+  };
+
+  const handleSaveNote = async (habitId: number, note: string) => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const existingLog = await db.logs.where({ habitId, date: todayStr }).first();
+    
+    if (existingLog) {
+      await db.logs.update(existingLog.id!, { note });
+    } else {
+      await db.logs.add({
+        habitId,
+        date: todayStr,
+        status: 'none',
+        timestamp: new Date(),
+        note
+      });
+    }
+  };
+
+  const exportToCSV = async () => {
+    const allHabits = await db.habits.toArray();
+    const allLogs = await db.logs.toArray();
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Type,ID,Name,Date,Status,Streak,StrictMode,IsArchived\n";
+
+    allHabits.forEach(h => {
+      csvContent += `Habit,${h.id},${h.name},${format(h.createdAt, 'yyyy-MM-dd')},,${h.streak},${h.strictMode},${h.isArchived}\n`;
+    });
+
+    allLogs.forEach(l => {
+      const habit = allHabits.find(h => h.id === l.habitId);
+      csvContent += `Log,${l.id},${habit?.name || 'Unknown'},${l.date},${l.status},,,\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `aura_data_${format(new Date(), 'yyyyMMdd')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const filteredHabits = useMemo(() => {
+    const list = habits?.filter(h => showArchived ? h.isArchived : !h.isArchived) || [];
+    const priorityMap = { high: 3, medium: 2, low: 1 };
+    return [...list].sort((a, b) => {
+      const pA = priorityMap[a.priority || 'medium'];
+      const pB = priorityMap[b.priority || 'medium'];
+      return pB - pA;
+    });
+  }, [habits, showArchived]);
+
+  const totalStreaks = habits?.reduce((acc, h) => acc + (h.isArchived ? 0 : h.streak), 0) || 0;
 
   const todayLogs = useMemo(() => {
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -291,18 +474,28 @@ export default function App() {
             
             <div className="flex flex-col">
               <motion.p 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="text-white/70 font-mono text-[11px] font-semibold uppercase tracking-[0.2em]"
+                initial={{ opacity: 0, filter: 'blur(10px)' }}
+                animate={{ opacity: 1, filter: 'blur(0px)' }}
+                transition={{ delay: 0.2, duration: 0.8 }}
+                className="text-white/70 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] relative"
               >
                 {hypeMessage}
+                <motion.span 
+                  animate={{ opacity: [0, 1, 0] }}
+                  transition={{ repeat: Infinity, duration: 0.1, repeatDelay: Math.random() * 5 }}
+                  className="absolute inset-0 bg-white/10 blur-sm"
+                />
               </motion.p>
               
               <motion.p
                 initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
+                animate={{ 
+                  opacity: [0.4, 1, 0.4],
+                  textShadow: auraFeedback.type === 'warning' 
+                    ? ["0 0 0px rgba(248,113,113,0)", "0 0 10px rgba(248,113,113,0.5)", "0 0 0px rgba(248,113,113,0)"]
+                    : ["0 0 0px rgba(0,255,157,0)", "0 0 10px rgba(0,255,157,0.5)", "0 0 0px rgba(0,255,157,0)"]
+                }}
+                transition={{ repeat: Infinity, duration: 3 }}
                 className={cn(
                   "text-[10px] italic font-bold",
                   auraFeedback.type === 'warning' ? "text-red-400" : "text-[#00ff9d]"
@@ -313,19 +506,23 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
             <motion.button
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              onClick={() => setIsStatsModalOpen(true)}
+              initial={{ opacity: 0, scale: 0.8, rotate: -10 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => { playSound('click'); setIsStatsModalOpen(true); }}
               className="w-9 h-9 rounded-xl glass flex items-center justify-center text-white/40 hover:text-white transition-all"
             >
               <BarChart3 size={16} />
             </motion.button>
             <motion.button
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              onClick={() => setIsSettingsOpen(true)}
+              initial={{ opacity: 0, scale: 0.8, rotate: 10 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              whileHover={{ scale: 1.1, rotate: -5 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => { playSound('click'); setIsSettingsOpen(true); }}
               className="w-9 h-9 rounded-xl glass flex items-center justify-center text-muted hover:text-primary transition-all"
             >
               <SettingsIcon size={16} />
@@ -338,23 +535,37 @@ export default function App() {
       <section className="px-5 mb-8">
         <div className="grid grid-cols-2 gap-3">
           <motion.div 
-            whileHover={{ scale: 1.01 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            whileHover={{ scale: 1.02, y: -2 }}
             className="glass rounded-2xl p-4 relative overflow-hidden group h-20 flex flex-col justify-center"
           >
-            <div className="absolute -right-2 -bottom-2 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity text-primary">
+            <motion.div 
+              animate={{ opacity: [0.03, 0.08, 0.03] }}
+              transition={{ repeat: Infinity, duration: 4 }}
+              className="absolute -right-2 -bottom-2 text-primary"
+            >
               <Trophy size={40} />
-            </div>
+            </motion.div>
             <p className="text-[9px] font-mono text-muted uppercase tracking-widest mb-0.5">{t.total_power}</p>
             <p className="text-xl font-black tracking-tight text-primary">{totalStreaks}</p>
           </motion.div>
           
           <motion.div 
-            whileHover={{ scale: 1.01 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            whileHover={{ scale: 1.02, y: -2 }}
             className="glass rounded-2xl p-4 relative overflow-hidden group h-20 flex flex-col justify-center"
           >
-            <div className="absolute -right-2 -bottom-2 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity text-primary">
+            <motion.div 
+              animate={{ opacity: [0.03, 0.08, 0.03] }}
+              transition={{ repeat: Infinity, duration: 4, delay: 2 }}
+              className="absolute -right-2 -bottom-2 text-primary"
+            >
               <Calendar size={40} />
-            </div>
+            </motion.div>
             <p className="text-[9px] font-mono text-muted uppercase tracking-widest mb-0.5">{t.active_auras}</p>
             <p className="text-xl font-black tracking-tight text-primary">{habits?.length || 0}</p>
           </motion.div>
@@ -364,7 +575,18 @@ export default function App() {
       {/* Habits List: Consistent Margins */}
       <main className="px-5 space-y-4">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-[10px] font-mono text-muted uppercase tracking-[0.2em] font-light">{t.current_protocols}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-[10px] font-mono text-muted uppercase tracking-[0.2em] font-light">{t.current_protocols}</h2>
+            <button 
+              onClick={() => setShowArchived(!showArchived)}
+              className={cn(
+                "text-[9px] font-bold px-2 py-0.5 rounded-full transition-all",
+                showArchived ? "bg-primary text-black" : "bg-white/5 text-muted hover:text-primary"
+              )}
+            >
+              {showArchived ? t.hide_archived : t.show_archived}
+            </button>
+          </div>
           <div className="h-[1px] flex-1 mx-3 bg-black/5 dark:bg-white/5" />
         </div>
 
@@ -381,13 +603,22 @@ export default function App() {
               }
             }}
           >
-            {habits?.map((habit) => {
+            {filteredHabits.map((habit) => {
               const todayLog = todayLogs.find(l => l.habitId === habit.id);
+              
+              // Calculate 7-day history
+              const history = Array.from({ length: 7 }, (_, i) => {
+                const date = format(subDays(new Date(), 6 - i), 'yyyy-MM-dd');
+                const log = logs?.find(l => l.habitId === habit.id && l.date === date);
+                return log?.status || 'none';
+              }) as ('done' | 'skip' | 'skipped' | 'fail' | 'none')[];
+
               return (
                 <HabitCard
                   key={habit.id!}
                   habit={habit}
                   todayStatus={todayLog?.status}
+                  history={history}
                   onComplete={handleComplete}
                   onSkip={handleSkip}
                   onEdit={(h) => {
@@ -395,13 +626,16 @@ export default function App() {
                     setIsAddModalOpen(true);
                   }}
                   onDelete={handleDeleteHabit}
+                  onArchive={handleArchiveHabit}
+                  onSaveNote={handleSaveNote}
+                  currentLog={todayLogs.find(l => l.habitId === habit.id)}
                 />
               );
             })}
           </motion.div>
         </AnimatePresence>
 
-        {habits?.length === 0 && (
+        {filteredHabits.length === 0 && (
           <div className="text-center py-12 glass rounded-2xl border-dashed border border-white/5">
             <Info className="mx-auto text-white/10 mb-3" size={24} />
             <p className="text-white/60 font-mono text-[10px] uppercase tracking-widest">{t.no_protocols}</p>
@@ -415,6 +649,7 @@ export default function App() {
         whileTap={{ scale: 0.95 }}
         onClick={() => {
           triggerHaptic('heavy');
+          playSound('click');
           setEditingHabit(undefined);
           setIsAddModalOpen(true);
         }}
@@ -531,6 +766,136 @@ export default function App() {
                     />
                   </button>
                 </div>
+
+                {/* Sound Toggle */}
+                <div className="flex items-center justify-between glass p-4 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className={cn("p-2 rounded-lg", soundEnabled ? "bg-accent-neon/10 text-accent-neon" : "bg-white/5 text-muted")}>
+                      <Volume2 size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-primary">{t.sound_effects}</p>
+                      <p className="text-[9px] text-muted">{t.sound_desc}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newState = !soundEnabled;
+                      setSoundEnabled(newState);
+                      if (newState) playSound('click');
+                    }}
+                    className={cn(
+                      "w-10 h-5 rounded-full transition-all relative",
+                      soundEnabled ? "bg-accent-neon" : "bg-white/10"
+                    )}
+                  >
+                    <motion.div
+                      animate={{ x: soundEnabled ? 22 : 2 }}
+                      className="absolute top-1 w-3 h-3 bg-white rounded-full"
+                    />
+                  </button>
+                </div>
+
+                {/* Theme Selection */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-muted mb-1">
+                    <Zap size={14} />
+                    <span className="text-[10px] font-mono uppercase tracking-widest">{t.theme}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {themes.map((theme) => (
+                      <button
+                        key={theme.id}
+                        onClick={() => { triggerHaptic('light'); setThemeId(theme.id); }}
+                        className={cn(
+                          "p-3 rounded-xl border transition-all text-left relative overflow-hidden group",
+                          themeId === theme.id 
+                            ? "border-primary bg-white/5" 
+                            : "border-white/5 hover:border-white/20"
+                        )}
+                      >
+                        <div 
+                          className="absolute -right-2 -bottom-2 w-8 h-8 blur-xl opacity-20"
+                          style={{ backgroundColor: theme.colors.accent }}
+                        />
+                        <p className={cn(
+                          "text-[10px] font-bold uppercase tracking-wider",
+                          themeId === theme.id ? "text-primary" : "text-muted"
+                        )}>
+                          {theme.name}
+                        </p>
+                        <div className="flex gap-1 mt-1.5">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.colors.bg, border: '1px solid rgba(255,255,255,0.1)' }} />
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.colors.accent }} />
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.colors.primary }} />
+                        </div>
+                      </button>
+                    ))}
+                    {customThemes?.map((theme) => (
+                      <button
+                        key={theme.id}
+                        onClick={() => { triggerHaptic('light'); setThemeId(theme.id); }}
+                        className={cn(
+                          "p-3 rounded-xl border transition-all text-left relative overflow-hidden group",
+                          themeId === theme.id 
+                            ? "border-primary bg-white/5" 
+                            : "border-white/5 hover:border-white/20"
+                        )}
+                      >
+                        <div 
+                          className="absolute -right-2 -bottom-2 w-8 h-8 blur-xl opacity-20"
+                          style={{ backgroundColor: theme.colors.accent }}
+                        />
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={cn(
+                            "text-[10px] font-bold uppercase tracking-wider truncate",
+                            themeId === theme.id ? "text-primary" : "text-muted"
+                          )}>
+                            {theme.name}
+                          </p>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              triggerHaptic('medium');
+                              db.customThemes.delete(theme.id);
+                              if (themeId === theme.id) setThemeId('aura');
+                            }}
+                            className="text-red-500/40 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        </div>
+                        <div className="flex gap-1 mt-1.5">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.colors.bg, border: '1px solid rgba(255,255,255,0.1)' }} />
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.colors.accent }} />
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.colors.primary }} />
+                        </div>
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => { triggerHaptic('light'); setIsThemeCreatorOpen(true); }}
+                      className="p-3 rounded-xl border border-dashed border-white/10 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 bg-white/[0.02]"
+                    >
+                      <Plus size={14} className="text-muted" />
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted">Create New</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Data Management */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-muted mb-1">
+                    <Download size={14} />
+                    <span className="text-[10px] font-mono uppercase tracking-widest">{t.data_management}</span>
+                  </div>
+                  <button
+                    onClick={() => { triggerHaptic('light'); exportToCSV(); }}
+                    className="w-full py-3 glass rounded-xl text-xs font-bold text-primary hover:bg-white/5 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Download size={14} />
+                    {t.export_csv}
+                  </button>
+                </div>
               </div>
 
               <button
@@ -558,6 +923,23 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ThemeCreator 
+        isOpen={isThemeCreatorOpen}
+        onClose={() => setIsThemeCreatorOpen(false)}
+        onThemeCreated={(id) => setThemeId(id)}
+      />
+
+      <UndoSnackbar 
+        isVisible={showDeleteUndo}
+        onUndo={handleUndoDelete}
+        onClose={() => {
+          setShowDeleteUndo(false);
+          setDeletedHabit(null);
+        }}
+        isStrict={false}
+        duration={5000}
+      />
     </div>
   );
 }
