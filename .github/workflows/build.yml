@@ -1,9 +1,8 @@
-name: Build APK
+name: Build Web APK
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
 
 jobs:
   build:
@@ -11,20 +10,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: set up JDK 17
-        uses: actions/setup-java@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          node-version: 20
 
-      - name: Grant execute permission
-        run: chmod +x gradlew || echo "gradlew not found"
+      - name: Install Dependencies
+        run: npm install
 
-      - name: Build with Gradle
-        run: ./gradlew assembleDebug
+      - name: Build Web Project
+        run: npm run build
+
+      # ဒီနေရာမှာ Capacitor ကိုသုံးပြီး Android folder ဆောက်မယ်
+      - name: Capacitor Build
+        run: |
+          npx cap sync
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: my-app-apk
-          path: "**/build/outputs/apk/debug/*.apk"
+          name: web-app-apk
+          path: "android/app/build/outputs/apk/debug/*.apk"
