@@ -74,7 +74,9 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
   const [color, setColor] = useState(colors[0]);
   const [strictMode, setStrictMode] = useState(false);
   const [reminderTime, setReminderTime] = useState('');
-  const [reminderFrequency, setReminderFrequency] = useState<'daily' | 'weekly' | 'custom'>('daily');
+  const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'interval'>('daily');
+  const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]); // Mon-Fri default
+  const [interval, setIntervalValue] = useState(2);
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [showStrictConfirm, setShowStrictConfirm] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
@@ -89,7 +91,9 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
       setColor(initialData.color);
       setStrictMode(initialData.strictMode);
       setReminderTime(initialData.reminderTime || '');
-      setReminderFrequency(initialData.reminderFrequency || 'daily');
+      setFrequency(initialData.frequency || 'daily');
+      setSelectedDays(initialData.frequencyConfig?.days || [1, 2, 3, 4, 5]);
+      setIntervalValue(initialData.frequencyConfig?.interval || 2);
       setPriority(initialData.priority || 'medium');
     } else {
       setName('');
@@ -97,7 +101,9 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
       setColor(colors[0]);
       setStrictMode(false);
       setReminderTime('');
-      setReminderFrequency('daily');
+      setFrequency('daily');
+      setSelectedDays([1, 2, 3, 4, 5]);
+      setIntervalValue(2);
       setPriority('medium');
     }
   }, [initialData, isOpen]);
@@ -115,6 +121,12 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
     setShowStrictConfirm(false);
   };
 
+  const toggleDay = (day: number) => {
+    setSelectedDays(prev => 
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort()
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
@@ -123,7 +135,11 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
       color,
       strictMode,
       reminderTime,
-      reminderFrequency,
+      frequency,
+      frequencyConfig: {
+        days: frequency === 'weekly' ? selectedDays : undefined,
+        interval: frequency === 'interval' ? interval : undefined
+      },
       priority,
       startDate: initialData?.startDate || new Date(),
       createdAt: initialData?.createdAt || new Date(),
@@ -298,31 +314,89 @@ export function AddHabitModal({ isOpen, onClose, onSave, initialData }: AddHabit
                 </AnimatePresence>
               </div>
 
+              {/* Frequency Settings */}
+              <div className="space-y-3">
+                <label className="text-[10px] font-mono text-muted uppercase tracking-widest mb-1 block">{t.frequency}</label>
+                <div className="grid grid-cols-3 gap-2 p-1 glass rounded-xl">
+                  {(['daily', 'weekly', 'interval'] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFrequency(f)}
+                      className={cn(
+                        "py-2 rounded-lg text-[10px] font-bold transition-all uppercase tracking-widest",
+                        frequency === f ? "bg-white text-black shadow-lg" : "text-muted hover:text-primary"
+                      )}
+                    >
+                      {t[f]}
+                    </button>
+                  ))}
+                </div>
+
+                <AnimatePresence mode="wait">
+                  {frequency === 'weekly' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="flex justify-between gap-1"
+                    >
+                      {[0, 1, 2, 3, 4, 5, 6].map((day) => {
+                        const dayNames = [t.sun, t.mon, t.tue, t.wed, t.thu, t.fri, t.sat];
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => toggleDay(day)}
+                            className={cn(
+                              "flex-1 aspect-square rounded-lg text-[9px] font-bold transition-all border",
+                              selectedDays.includes(day) 
+                                ? "bg-primary text-black border-primary" 
+                                : "bg-white/5 text-muted border-white/5 hover:border-white/20"
+                            )}
+                          >
+                            {dayNames[day].charAt(0)}
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+
+                  {frequency === 'interval' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="flex items-center gap-3 glass p-3 rounded-xl"
+                    >
+                      <span className="text-xs text-muted">{t.interval}:</span>
+                      <input
+                        type="range"
+                        min="2"
+                        max="30"
+                        value={interval}
+                        onChange={(e) => setIntervalValue(parseInt(e.target.value))}
+                        className="flex-1 accent-primary"
+                      />
+                      <span className="text-xs font-bold text-primary min-w-[60px]">
+                        {t.every_x_days.replace('{x}', interval.toString())}
+                      </span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               {/* Reminder Settings */}
               <div className="space-y-3">
                 <label className="text-[10px] font-mono text-muted uppercase tracking-widest mb-1 block">{t.reminders}</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="glass p-3 rounded-xl flex flex-col gap-1">
-                    <span className="text-[9px] text-muted uppercase tracking-wider">{t.reminder_time}</span>
-                    <input
-                      type="time"
-                      value={reminderTime}
-                      onChange={(e) => setReminderTime(e.target.value)}
-                      className="bg-transparent text-primary text-sm font-bold focus:outline-none"
-                    />
-                  </div>
-                  <div className="glass p-3 rounded-xl flex flex-col gap-1">
-                    <span className="text-[9px] text-muted uppercase tracking-wider">{t.frequency}</span>
-                    <select
-                      value={reminderFrequency}
-                      onChange={(e) => setReminderFrequency(e.target.value as any)}
-                      className="bg-transparent text-primary text-sm font-bold focus:outline-none appearance-none cursor-pointer"
-                    >
-                      <option value="daily" className="bg-[#0D0D0D]">{t.daily}</option>
-                      <option value="weekly" className="bg-[#0D0D0D]">{t.weekly}</option>
-                      <option value="custom" className="bg-[#0D0D0D]">{t.custom}</option>
-                    </select>
-                  </div>
+                <div className="glass p-3 rounded-xl flex flex-col gap-1">
+                  <span className="text-[9px] text-muted uppercase tracking-wider">{t.reminder_time}</span>
+                  <input
+                    type="time"
+                    value={reminderTime}
+                    onChange={(e) => setReminderTime(e.target.value)}
+                    className="bg-transparent text-primary text-sm font-bold focus:outline-none"
+                  />
                 </div>
               </div>
 

@@ -12,8 +12,12 @@ export interface Habit {
   lastCompleted?: Date;
   isArchived?: boolean;
   reminderTime?: string; // HH:mm
-  reminderFrequency?: 'daily' | 'weekly' | 'custom';
-  priority?: 'low' | 'medium' | 'high';
+  frequency: 'daily' | 'weekly' | 'interval';
+  frequencyConfig?: {
+    days?: number[]; // 0-6 for weekly (Sun-Sat)
+    interval?: number; // every X days
+  };
+  priority: 'low' | 'medium' | 'high';
 }
 
 export interface Log {
@@ -70,6 +74,7 @@ export async function seedDatabase() {
         createdAt: new Date(),
         strictMode: true,
         streak: 0,
+        frequency: 'daily',
         priority: 'high'
       },
       {
@@ -80,6 +85,7 @@ export async function seedDatabase() {
         createdAt: new Date(),
         strictMode: false,
         streak: 0,
+        frequency: 'daily',
         priority: 'medium'
       },
       {
@@ -90,6 +96,7 @@ export async function seedDatabase() {
         createdAt: new Date(),
         strictMode: true,
         streak: 0,
+        frequency: 'daily',
         priority: 'high'
       }
     ]);

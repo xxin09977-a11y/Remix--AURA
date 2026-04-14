@@ -79,7 +79,14 @@ export const translations = {
     add_note: "Add Note",
     note_placeholder: "Context for this protocol...",
     save_note: "Save Note",
-    view_journal: "View Journal"
+    view_journal: "View Journal",
+    retro_log: "Retro Log",
+    select_date: "Select Date",
+    every_day: "Every Day",
+    mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun",
+    interval: "Interval",
+    every_x_days: "Every {x} days",
+    days: "days"
   },
   mm: {
     app_name: "Aura",
@@ -161,7 +168,14 @@ export const translations = {
     add_note: "မှတ်စုထည့်ပါ",
     note_placeholder: "ဤပရိုတိုကောအတွက် အကြောင်းအရာ...",
     save_note: "မှတ်စုသိမ်းပါ",
-    view_journal: "မှတ်တမ်းကြည့်ပါ"
+    view_journal: "မှတ်တမ်းကြည့်ပါ",
+    retro_log: "ယခင်နေ့မှတ်ရန်",
+    select_date: "ရက်စွဲရွေးပါ",
+    every_day: "နေ့စဉ်",
+    mon: "တနင်္လာ", tue: "အင်္ဂါ", wed: "ဗုဒ္ဓဟူး", thu: "ကြာသပတေး", fri: "သောကြာ", sat: "စနေ", sun: "တနင်္ဂနွေ",
+    interval: "ခြားနားချက်",
+    every_x_days: "{x} ရက်လျှင်တစ်ကြိမ်",
+    days: "ရက်"
   }
 };
 

@@ -17,7 +17,7 @@ import { StatsModal } from './components/StatsModal';
 import { UndoSnackbar } from './components/UndoSnackbar';
 import { ThemeCreator } from './components/ThemeCreator';
 import { cn } from './lib/utils';
-import { isToday, differenceInDays, startOfDay, subDays, format } from 'date-fns';
+import { isToday, differenceInDays, startOfDay, subDays, format, isSameDay } from 'date-fns';
 import { translations, type Language } from './lib/i18n';
 import { requestNotificationPermission, startNotificationScheduler } from './lib/notifications';
 import { themes, type ThemeId } from './lib/themes';
@@ -230,6 +230,8 @@ export default function App() {
       });
     }
 
+    await recalculateStreak(id);
+
     triggerHaptic('medium');
     playSound('success');
     setShowSuccess(true);
@@ -240,6 +242,110 @@ export default function App() {
       spread: 70,
       origin: { y: 0.6 },
       colors: [habit.color, '#ffffff', '#00ff9d']
+    });
+  };
+
+  const handleRetroComplete = async (id: number, dateStr: string) => {
+    const habit = await db.habits.get(id);
+    if (!habit) return;
+
+    const existingLog = await db.logs.where({ habitId: id, date: dateStr }).first();
+
+    if (existingLog) {
+      if (existingLog.status === 'done') {
+        // Toggle off
+        await db.logs.delete(existingLog.id!);
+      } else {
+        await db.logs.update(existingLog.id!, { status: 'done', timestamp: new Date(dateStr) });
+      }
+    } else {
+      await db.logs.add({
+        habitId: id,
+        date: dateStr,
+        status: 'done',
+        timestamp: new Date(dateStr)
+      });
+    }
+
+    await recalculateStreak(id);
+    triggerHaptic('medium');
+    playSound('success');
+  };
+
+  const recalculateStreak = async (habitId: number) => {
+    const habit = await db.habits.get(habitId);
+    if (!habit) return;
+
+    const allLogs = await db.logs
+      .where('habitId')
+      .equals(habitId)
+      .and(l => l.status === 'done')
+      .sortBy('date');
+
+    if (allLogs.length === 0) {
+      await db.habits.update(habitId, { streak: 0, lastCompleted: undefined });
+      return;
+    }
+
+    let streak = 0;
+    const today = startOfDay(new Date());
+    const sortedDates = allLogs.map(l => startOfDay(new Date(l.date))).sort((a, b) => b.getTime() - a.getTime());
+    
+    const lastLogDate = sortedDates[0];
+    
+    // Check if current streak is still alive
+    let isAlive = true;
+    if (habit.frequency === 'daily') {
+      if (differenceInDays(today, lastLogDate) > 1) isAlive = false;
+    } else if (habit.frequency === 'weekly' && habit.frequencyConfig?.days) {
+      // Find the last required day before today
+      let checkDate = subDays(today, 1);
+      while (!habit.frequencyConfig.days.includes(checkDate.getDay())) {
+        checkDate = subDays(checkDate, 1);
+      }
+      if (lastLogDate < checkDate) isAlive = false;
+    } else if (habit.frequency === 'interval' && habit.frequencyConfig?.interval) {
+      if (differenceInDays(today, lastLogDate) > habit.frequencyConfig.interval) isAlive = false;
+    }
+
+    if (!isAlive) {
+      // If the streak is dead relative to today, we still want to calculate the "last" streak
+      // But the requirement says "streak calculation updates correctly". 
+      // Usually this means the current streak.
+    }
+
+    // Calculate consecutive completions based on frequency
+    streak = 1;
+    for (let i = 0; i < sortedDates.length - 1; i++) {
+      const current = sortedDates[i];
+      const next = sortedDates[i + 1];
+      
+      let isConsecutive = false;
+      if (habit.frequency === 'daily') {
+        if (differenceInDays(current, next) === 1) isConsecutive = true;
+      } else if (habit.frequency === 'weekly' && habit.frequencyConfig?.days) {
+        let expectedPrev = subDays(current, 1);
+        while (!habit.frequencyConfig.days.includes(expectedPrev.getDay())) {
+          expectedPrev = subDays(expectedPrev, 1);
+        }
+        if (isSameDay(next, expectedPrev)) isConsecutive = true;
+      } else if (habit.frequency === 'interval' && habit.frequencyConfig?.interval) {
+        if (differenceInDays(current, next) === habit.frequencyConfig.interval) isConsecutive = true;
+      }
+
+      if (isConsecutive) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    // If the last completion was too long ago, the current streak is 0
+    if (!isAlive) streak = 0;
+
+    await db.habits.update(habitId, {
+      streak,
+      lastCompleted: lastLogDate
     });
   };
 
@@ -628,7 +734,9 @@ export default function App() {
                   onDelete={handleDeleteHabit}
                   onArchive={handleArchiveHabit}
                   onSaveNote={handleSaveNote}
+                  onRetroComplete={handleRetroComplete}
                   currentLog={todayLogs.find(l => l.habitId === habit.id)}
+                  allLogs={logs?.filter(l => l.habitId === habit.id) || []}
                 />
               );
             })}

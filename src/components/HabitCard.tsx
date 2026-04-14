@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Check, X, Edit2, Trash2,
-  Lock, Archive, ArchiveRestore, AlertCircle, MessageSquare, StickyNote, Zap, Shield, Flame
+  Lock, Archive, ArchiveRestore, AlertCircle, MessageSquare, StickyNote, Zap, Shield, Flame, Calendar as CalendarIcon
 } from 'lucide-react';
 import { type Habit, db, type Log } from '../db/db';
 import { cn } from '../lib/utils';
-import { format, isToday, startOfDay } from 'date-fns';
+import { format, isToday, startOfDay, subDays, isSameDay, parseISO } from 'date-fns';
 import { triggerHaptic } from '../App';
 import { translations } from '../lib/i18n';
 import { playSound } from '../lib/sounds';
@@ -23,10 +23,12 @@ interface HabitCardProps {
   onSkip: (id: number) => Promise<void> | void;
   onArchive: (id: number) => Promise<void> | void;
   onSaveNote: (habitId: number, note: string) => Promise<void> | void;
+  onRetroComplete: (id: number, date: string) => Promise<void> | void;
   currentLog?: Log;
+  allLogs?: Log[];
 }
 
-export function HabitCard({ habit, todayStatus, history = [], onEdit, onDelete, onComplete, onSkip, onArchive, onSaveNote, currentLog }: HabitCardProps) {
+export function HabitCard({ habit, todayStatus, history = [], onEdit, onDelete, onComplete, onSkip, onArchive, onSaveNote, onRetroComplete, currentLog, allLogs = [] }: HabitCardProps) {
   const Icon = iconMap[habit.icon] || Zap;
   const isCompletedToday = todayStatus === 'done';
   const isSkippedToday = todayStatus === 'skip' || todayStatus === 'skipped';
@@ -34,6 +36,7 @@ export function HabitCard({ habit, todayStatus, history = [], onEdit, onDelete, 
   const isLocked = habit.strictMode && isActionedToday;
   const [isLongPressing, setIsLongPressing] = useState(false);
   const [isNoteOpen, setIsNoteOpen] = useState(false);
+  const [isRetroOpen, setIsRetroOpen] = useState(false);
   const [noteText, setNoteText] = useState(currentLog?.note || '');
 
   const lang = (localStorage.getItem('aura-lang') as 'en' | 'mm') || 'en';
@@ -182,13 +185,22 @@ export function HabitCard({ habit, todayStatus, history = [], onEdit, onDelete, 
       <div className="grid grid-cols-12 gap-2 mb-3">
         <motion.button
           whileTap={{ scale: 0.98 }}
+          animate={isCompletedToday ? {
+            boxShadow: [
+              `0 0 20px ${habit.color}20`,
+              `0 0 40px ${habit.color}40`,
+              `0 0 20px ${habit.color}20`
+            ],
+            scale: [1, 1.02, 1]
+          } : {}}
+          transition={isCompletedToday ? { repeat: Infinity, duration: 2 } : {}}
           onClick={() => {
             triggerHaptic('medium');
             playSound('click');
             habit.id && onComplete(habit.id);
           }}
           className={cn(
-            "col-span-8 h-12 rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all border",
+            "col-span-7 h-12 rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all border",
             isCompletedToday 
               ? "bg-[#00ff9d] text-black border-[#00ff9d] shadow-[0_0_30px_rgba(0,255,157,0.3)]" 
               : "bg-white text-black border-white hover:bg-white/90 shadow-[0_4px_20px_rgba(255,255,255,0.15)]",
@@ -210,6 +222,21 @@ export function HabitCard({ habit, todayStatus, history = [], onEdit, onDelete, 
         </motion.button>
 
         <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={() => {
+            triggerHaptic('light');
+            setIsRetroOpen(!isRetroOpen);
+          }}
+          className={cn(
+            "col-span-2 h-12 rounded-2xl flex items-center justify-center border transition-all",
+            isRetroOpen ? "bg-white/20 border-white/30 text-white" : "bg-white/5 border-white/10 text-muted hover:text-primary"
+          )}
+          title={t.retro_log}
+        >
+          <CalendarIcon size={18} />
+        </motion.button>
+
+        <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={() => {
             triggerHaptic('light');
@@ -217,7 +244,7 @@ export function HabitCard({ habit, todayStatus, history = [], onEdit, onDelete, 
             habit.id && onSkip(habit.id);
           }}
           className={cn(
-            "col-span-4 h-12 rounded-2xl font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 border",
+            "col-span-3 h-12 rounded-2xl font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 border",
             isSkippedToday 
               ? (todayStatus === 'skipped' ? "text-amber-400 border-amber-400/30 bg-amber-400/10" : "text-red-400 border-red-400/30 bg-red-400/10") 
               : "text-muted border-white/10 hover:border-white/30 hover:text-primary bg-white/[0.03]"
@@ -227,6 +254,61 @@ export function HabitCard({ habit, todayStatus, history = [], onEdit, onDelete, 
           <span>{isSkippedToday ? t.skipped : t.skip}</span>
         </motion.button>
       </div>
+
+      {/* Retro Log Date Picker */}
+      <AnimatePresence>
+        {isRetroOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden mb-3"
+          >
+            <div className="glass p-3 rounded-xl">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-muted">{t.select_date}</span>
+                <button onClick={() => setIsRetroOpen(false)} className="text-muted hover:text-white">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {Array.from({ length: 14 }).map((_, i) => {
+                  const date = subDays(new Date(), i);
+                  const dateStr = format(date, 'yyyy-MM-dd');
+                  const isCompleted = allLogs.some(l => l.date === dateStr && l.status === 'done');
+                  const isTodayDate = isToday(date);
+                  
+                  return (
+                    <motion.button
+                      key={dateStr}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => {
+                        triggerHaptic('medium');
+                        habit.id && onRetroComplete(habit.id, dateStr);
+                        setIsRetroOpen(false);
+                      }}
+                      className={cn(
+                        "aspect-square rounded-lg flex flex-col items-center justify-center relative border transition-all",
+                        isCompleted 
+                          ? "bg-[#00ff9d]/20 border-[#00ff9d]/30 text-[#00ff9d]" 
+                          : "bg-white/5 border-white/5 text-muted hover:border-white/20",
+                        isTodayDate && "ring-1 ring-white/40"
+                      )}
+                    >
+                      <span className="text-[10px] font-bold">{format(date, 'd')}</span>
+                      <span className="text-[7px] opacity-40 uppercase">{format(date, 'EEE')}</span>
+                      {isCompleted && (
+                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-[#00ff9d] rounded-full shadow-[0_0_5px_#00ff9d]" />
+                      )}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Secondary Actions: Subtle & Organized */}
       <div className="flex items-center justify-between px-1">
