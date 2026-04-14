@@ -85,6 +85,34 @@ export default function App() {
   const [deletedHabit, setDeletedHabit] = useState<{ habit: Habit, logs: Log[] } | null>(null);
   const [showDeleteUndo, setShowDeleteUndo] = useState(false);
 
+  const isStreakAlive = (habit: Habit, lastCompletedDate: Date, referenceDate: Date) => {
+    const lastComp = startOfDay(new Date(lastCompletedDate));
+    const ref = startOfDay(new Date(referenceDate));
+    
+    if (isSameDay(lastComp, ref)) return true;
+
+    if (habit.frequency === 'daily') {
+      return differenceInDays(ref, lastComp) <= 1;
+    }
+    
+    if (habit.frequency === 'weekly' && habit.frequencyConfig?.days) {
+      // Find the last required day before the reference date
+      let lastScheduled = subDays(ref, 1);
+      let attempts = 0;
+      while (!habit.frequencyConfig.days.includes(lastScheduled.getDay()) && attempts < 7) {
+        lastScheduled = subDays(lastScheduled, 1);
+        attempts++;
+      }
+      return lastComp >= lastScheduled;
+    }
+    
+    if (habit.frequency === 'interval' && habit.frequencyConfig?.interval) {
+      return differenceInDays(ref, lastComp) <= habit.frequencyConfig.interval;
+    }
+    
+    return true;
+  };
+
   useEffect(() => {
     seedDatabase();
     setHypeMessage(t.hype_messages[Math.floor(Math.random() * t.hype_messages.length)]);
@@ -94,17 +122,14 @@ export default function App() {
   useEffect(() => {
     if (habits) {
       const checkBrokenStreaks = async () => {
-        const today = startOfDay(new Date());
+        const today = new Date();
         let penaltyShown = false;
         for (const habit of habits) {
           if (habit.strictMode && habit.streak > 0 && habit.lastCompleted) {
-            const lastComp = startOfDay(new Date(habit.lastCompleted));
-            const daysSinceLast = differenceInDays(today, lastComp);
-            if (daysSinceLast > 1) {
+            if (!isStreakAlive(habit, habit.lastCompleted, today)) {
               // Streak broken!
               await db.habits.update(habit.id!, {
-                streak: 0,
-                lastCompleted: subDays(today, 1) // Set to yesterday so it doesn't re-trigger
+                streak: 0
               });
               if (!penaltyShown) {
                 setPenaltyHabit(habit.name);
@@ -199,22 +224,11 @@ export default function App() {
       }
     }
 
-    const lastCompleted = habit.lastCompleted ? startOfDay(new Date(habit.lastCompleted)) : null;
-    let newStreak = habit.streak + 1;
+    const lastCompleted = habit.lastCompleted ? new Date(habit.lastCompleted) : null;
     
-    // Check if streak was broken (missed yesterday)
-    if (lastCompleted) {
-      const daysSinceLast = differenceInDays(today, lastCompleted);
-      if (daysSinceLast > 1) {
-        if (habit.strictMode) setPenaltyHabit(habit.name);
-        newStreak = 1;
-      }
+    if (lastCompleted && !isStreakAlive(habit, lastCompleted, today)) {
+      if (habit.strictMode) setPenaltyHabit(habit.name);
     }
-
-    await db.habits.update(id, {
-      streak: newStreak,
-      lastCompleted: new Date()
-    });
 
     if (existingLog) {
       await db.logs.update(existingLog.id!, {
@@ -279,7 +293,7 @@ export default function App() {
     const allLogs = await db.logs
       .where('habitId')
       .equals(habitId)
-      .and(l => l.status === 'done')
+      .and(l => l.status === 'done' || l.status === 'skipped')
       .sortBy('date');
 
     if (allLogs.length === 0) {
@@ -287,61 +301,44 @@ export default function App() {
       return;
     }
 
+    const today = new Date();
+    const sortedLogs = [...allLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const lastLogDate = startOfDay(new Date(sortedLogs[0].date));
+    
     let streak = 0;
-    const today = startOfDay(new Date());
-    const sortedDates = allLogs.map(l => startOfDay(new Date(l.date))).sort((a, b) => b.getTime() - a.getTime());
-    
-    const lastLogDate = sortedDates[0];
-    
-    // Check if current streak is still alive
-    let isAlive = true;
-    if (habit.frequency === 'daily') {
-      if (differenceInDays(today, lastLogDate) > 1) isAlive = false;
-    } else if (habit.frequency === 'weekly' && habit.frequencyConfig?.days) {
-      // Find the last required day before today
-      let checkDate = subDays(today, 1);
-      while (!habit.frequencyConfig.days.includes(checkDate.getDay())) {
-        checkDate = subDays(checkDate, 1);
-      }
-      if (lastLogDate < checkDate) isAlive = false;
-    } else if (habit.frequency === 'interval' && habit.frequencyConfig?.interval) {
-      if (differenceInDays(today, lastLogDate) > habit.frequencyConfig.interval) isAlive = false;
-    }
 
-    if (!isAlive) {
-      // If the streak is dead relative to today, we still want to calculate the "last" streak
-      // But the requirement says "streak calculation updates correctly". 
-      // Usually this means the current streak.
-    }
-
-    // Calculate consecutive completions based on frequency
-    streak = 1;
-    for (let i = 0; i < sortedDates.length - 1; i++) {
-      const current = sortedDates[i];
-      const next = sortedDates[i + 1];
-      
-      let isConsecutive = false;
-      if (habit.frequency === 'daily') {
-        if (differenceInDays(current, next) === 1) isConsecutive = true;
-      } else if (habit.frequency === 'weekly' && habit.frequencyConfig?.days) {
-        let expectedPrev = subDays(current, 1);
-        while (!habit.frequencyConfig.days.includes(expectedPrev.getDay())) {
-          expectedPrev = subDays(expectedPrev, 1);
+    if (!isStreakAlive(habit, lastLogDate, today)) {
+      streak = 0;
+    } else {
+      // Calculate consecutive chain
+      for (let i = 0; i < sortedLogs.length; i++) {
+        const currentLog = sortedLogs[i];
+        const current = startOfDay(new Date(currentLog.date));
+        
+        if (currentLog.status === 'done') streak++;
+        
+        const nextLog = sortedLogs[i + 1];
+        if (!nextLog) break;
+        const next = startOfDay(new Date(nextLog.date));
+        
+        let isConsecutive = false;
+        if (habit.frequency === 'daily') {
+          if (differenceInDays(current, next) === 1) isConsecutive = true;
+        } else if (habit.frequency === 'weekly' && habit.frequencyConfig?.days) {
+          let expectedPrev = subDays(current, 1);
+          let attempts = 0;
+          while (!habit.frequencyConfig.days.includes(expectedPrev.getDay()) && attempts < 7) {
+            expectedPrev = subDays(expectedPrev, 1);
+            attempts++;
+          }
+          if (isSameDay(next, expectedPrev)) isConsecutive = true;
+        } else if (habit.frequency === 'interval' && habit.frequencyConfig?.interval) {
+          if (differenceInDays(current, next) <= habit.frequencyConfig.interval) isConsecutive = true;
         }
-        if (isSameDay(next, expectedPrev)) isConsecutive = true;
-      } else if (habit.frequency === 'interval' && habit.frequencyConfig?.interval) {
-        if (differenceInDays(current, next) === habit.frequencyConfig.interval) isConsecutive = true;
-      }
 
-      if (isConsecutive) {
-        streak++;
-      } else {
-        break;
+        if (!isConsecutive) break;
       }
     }
-
-    // If the last completion was too long ago, the current streak is 0
-    if (!isAlive) streak = 0;
 
     await db.habits.update(habitId, {
       streak,
@@ -424,9 +421,7 @@ export default function App() {
       });
     }
     
-    await db.habits.update(id, {
-      lastCompleted: new Date()
-    });
+    await recalculateStreak(id);
   };
 
   const handleSaveHabit = async (habitData: Partial<Habit>) => {
